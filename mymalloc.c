@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stddef.h>
+
 #include "mymalloc.h"
 
 void initMEM(void* start_adr_ptr, size_t mem_size) {
@@ -75,78 +77,144 @@ void insert_h(void* addr, chunk_header_t* header) {
 	chunk_ptr -> next = header -> next;
 }
 
-void delete_h(chunk_header_t* header) {
+void delete_h(chunk_header_t* header_ptr) {
 	/* declare next & prev */
-	chunk_header_t* prev_chunk = header -> prev;
-	chunk_header_t* next_chunk = header -> next;
-	if(prev_chunk != NULL) {
+	chunk_header_t* prev_chunk = header_ptr -> prev;
+	chunk_header_t* next_chunk = header_ptr -> next;
+
+	/* free chunk */
+	header_ptr -> state = FREE;
+
+	/* if it's not the last chunk */
+	if( (prev_chunk != NULL) && (prev_chunk -> state == FREE) ) {
 		/* link next with prev */
 		prev_chunk -> next = next_chunk;
 		next_chunk -> prev = prev_chunk;
 		
 		/* add the size of header to the previous one */
-		prev_chunk -> size += header -> size + sizeof(chunk_header_t);
+		prev_chunk -> size += header_ptr -> size + sizeof(chunk_header_t);
 	
-		/* if the last header is not the last, concatenate with prev */
-		if(next_chunk -> next != NULL ) {
-			prev_chunk -> size += next_chunk -> size;
-			prev_chunk -> next = next_chunk -> next;
-		}
-	} else {
-		if(next_chunk -> next != NULL ) {
-			header -> size += next_chunk -> size;
-			header -> next = next_chunk -> next;
-			header -> state = next_chunk -> state;
-		} 
-	}
+		/* if the next chunk is free and not the last, concatenate with prev */
+		header_ptr = prev_chunk;
+		
+	} 
+
+	/* link with next */
+	if( (next_chunk -> next != NULL) && (next_chunk -> state == FREE) ) {
+		header_ptr -> size += next_chunk -> size + sizeof(chunk_header_t);
+		header_ptr -> next = next_chunk -> next;
+	} 
 }
 
 
+void myfree(void* loc_ptr) {
+	chunk_header_t* header_ptr = (chunk_header_t*) ( ((uint8_t*) loc_ptr) - sizeof(chunk_header_t) );
+	delete_h(header_ptr);
+}
 
 void* mymalloc(size_t chunk_size, void* start_adr_ptr) {
+
 	chunk_header_t* chunk_ptr = (chunk_header_t*) start_adr_ptr;
-	void* return_value;
-	uint8_t found = 0;
-	while(!found) {
+
+	while(1) {
 		/* if the chunk is free */
-		if(chunk_ptr -> state == FREE) {
-			/* if it has the needed size + the size of a header */
-			if( (chunk_ptr -> size) >= chunk_size ) {
+		/* if it has the needed size + the size of a header */
+		if( (chunk_ptr -> state == FREE) && (chunk_ptr -> size >= chunk_size) ) {
+			/* calculate remaining memory of chunk */
+			size_t remaining_memory = chunk_ptr -> size - chunk_size;
+			/* declare a new header for the remaining memory */
+			uint8_t* new_header_addr = NULL;
+			chunk_header_t new_header;
+			
+			/* if there is enough memory, add another free header or give all chunk */
+			if(remaining_memory > sizeof(chunk_header_t)) {
+				/* find the address for next chunk */
+				new_header_addr = (uint8_t*) chunk_ptr + sizeof(chunk_header_t) + chunk_size;
+				/* configure the new header */
+				new_header.size = remaining_memory - sizeof(chunk_header_t);
+				new_header.state = FREE;
+				new_header.prev = (void*) chunk_ptr;
+				new_header.next = chunk_ptr -> next;
+				insert_h(new_header_addr, &new_header);
 
-				/* calculate remaining memory of chunk */
-				size_t remaining_memory = chunk_ptr -> size - chunk_size;
-				/* declare a new header for the remaining memory */
-				uint8_t* new_header_addr = NULL;
-				chunk_header_t new_header;
-				
+				/* update the next node */
+				chunk_ptr -> next = (void*) new_header_addr;
+				chunk_ptr -> state = OCUP;
+				chunk_ptr -> size = chunk_size;
+			} else { 
+				/* no memory left for another chunk */
+				/* we just update the state */
+				chunk_ptr -> state = OCUP;
+			}
+			/* update flag, return pointer */
+			return (void*) ((uint8_t*) chunk_ptr + sizeof(chunk_header_t));
+		} 
 
-				if(remaining_memory >= sizeof(chunk_header_t)) {
-					new_header_addr = (uint8_t*) chunk_ptr + sizeof(chunk_header_t) + chunk_size;
-					new_header.size = remaining_memory - sizeof(chunk_header_t);
-					new_header.state = FREE;
-					new_header.prev = (void*) chunk_ptr;
-					new_header.next = chunk_ptr -> next;
-					insert_h(new_header_addr, &new_header);
-					chunk_ptr -> next = (void*) new_header_addr;
-
-					if(chunk_ptr -> prev != NULL) {
-						chunk_header_t* prev = (chunk_header_t*) chunk_ptr -> prev;
-						prev -> next = chunk_ptr -> next;
-						prev -> size += chunk_size + sizeof(chunk_header_t);
-						((chunk_header_t*)new_header_addr) -> prev = (void*) prev;
-					} else {
-						chunk_ptr -> size = chunk_size;
-						chunk_ptr -> state = OCUP;
-					}
-					found = 1;
-					return (void*) ((uint8_t*) chunk_ptr + sizeof(chunk_header_t));
-				} 
-			}			
-		} else {
-			chunk_ptr = (chunk_header_t*) chunk_ptr -> next;
+		/* if end reached */
+		if(chunk_ptr -> next == NULL) {
+			return NULL;
 		}
 
-	} // while(!found)
+		/* move to next chunk */
+		chunk_ptr = (chunk_header_t*) chunk_ptr -> next;
+	} // while(1)
+}
+
+
+void* mymalloc_best(size_t chunk_size, void* start_adr_ptr) {
+
+	chunk_header_t* chunk_ptr = (chunk_header_t*) start_adr_ptr;
+	chunk_header_t* best_chunk_ptr = NULL;
+	size_t best_size = 0;
+	uint8_t traversed_all = 0;
+
+	/* find best chunk */
+	while(!traversed_all) {
+		/* if it's a viable chunk */
+		if( (chunk_ptr -> state == FREE) && (chunk_ptr -> size >= chunk_size) ) {
+			if (chunk_ptr -> size > best_size) {
+				best_size = chunk_ptr -> size;
+				best_chunk_ptr = chunk_ptr;
+			}
+		} 
+		/* move to next chunk */
+		chunk_ptr = (chunk_header_t*) chunk_ptr -> next;
+		/* if end reached */
+		if(chunk_ptr == NULL) {
+			traversed_all = 1;
+		}
+	} // while(!traversed_all)
+
+	if(best_chunk_ptr != NULL) {
+		chunk_ptr = best_chunk_ptr;
+		/* calculate remaining memory of chunk */
+		size_t remaining_memory = chunk_ptr -> size - chunk_size;
+		/* declare a new header for the remaining memory */
+		uint8_t* new_header_addr = NULL;
+		chunk_header_t new_header;
+		/* if there is enough memory, add another free header or give all chunk */
+		if(remaining_memory > sizeof(chunk_header_t)) {
+			/* find the address for next chunk */
+			new_header_addr = (uint8_t*) chunk_ptr + sizeof(chunk_header_t) + chunk_size;
+			/* configure the new header */
+			new_header.size = remaining_memory - sizeof(chunk_header_t);
+			new_header.state = FREE;
+			new_header.prev = (void*) chunk_ptr;
+			new_header.next = chunk_ptr -> next;
+			insert_h(new_header_addr, &new_header);
+			/* update the next node */
+			chunk_ptr -> next = (void*) new_header_addr;
+			chunk_ptr -> state = OCUP;
+			chunk_ptr -> size = chunk_size;
+		} else { 
+			/* no memory left for another chunk */
+			/* we just update the state */
+			chunk_ptr -> state = OCUP;
+		}
+		/* update flag, return pointer */
+		return (void*) ((uint8_t*) chunk_ptr + sizeof(chunk_header_t));
+	} 
 	return NULL;
 }
+
 
