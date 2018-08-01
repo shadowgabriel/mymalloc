@@ -5,19 +5,23 @@
 #include "mymalloc.h"
 
 int main(void) {
-	size_t memory_size = 1024;
-	uint8_t memory[memory_size];
 
-	printf("\n");
-	printf("size of chunk = %d\n", sizeof(chunk_header_t));
-	printf("\n");
+	memory_t memory_struct; 
+	uint8_t* memory = memory_struct.memory;
+	
+	printf("unused address= %p\n", &(memory_struct.unused) );
+	printf("mem address = %p\n", memory);
+	printf("align of memory type = %d\n", __alignof__(memory_t) );	
+	printf("align_mask = %d\n", align_mask );
+	printf("size of header = %d\n", sizeof(chunk_header_t));
 
+/*
 	initMEM(memory, memory_size);
 	printf("\tSTATE 1: ");
 	printf("\n");
 	print_all(memory);
 	printf("\n");
-
+	
 	void* lol1 = mymalloc(30, memory);
 	printf("\tSTATE 2: ");
 	printf("\n");
@@ -60,7 +64,6 @@ int main(void) {
 	printf("\n");
 	print_all(memory);
 	printf("\n");
-
-
+*/
 	return 0;
 }

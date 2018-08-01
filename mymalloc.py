@@ -8,5 +8,6 @@ c_files = ["main.c", "mymalloc.c"]
 h_files = ["mymalloc.h"]
 gcc = GCCsupport(c_files, h_files, path_exe)
 gcc.compile();
+unused = os.system("cls")
 os.system(path_exe)
 exit()
