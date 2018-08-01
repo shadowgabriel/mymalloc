@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <stddef.h>
+#include <stdalign.h>
 #include "mymalloc.h"
 
 int main(void) {
@@ -9,25 +10,18 @@ int main(void) {
 	memory_t memory_struct; 
 	uint8_t* memory = memory_struct.memory;
 	
-	printf("unused address= %p\n", &(memory_struct.unused) );
-	printf("mem address = %p\n", memory);
-	printf("align of memory type = %d\n", __alignof__(memory_t) );	
-	printf("align_mask = %d\n", align_mask );
-	printf("size of header = %d\n", sizeof(chunk_header_t));
-
-/*
-	initMEM(memory, memory_size);
+	initMEM(memory, MEMORY_SIZE);
 	printf("\tSTATE 1: ");
 	printf("\n");
 	print_all(memory);
 	printf("\n");
-	
-	void* lol1 = mymalloc(30, memory);
+
+	void* lol1 = mymalloc(3, memory);
 	printf("\tSTATE 2: ");
 	printf("\n");
 	print_all(memory);
 	printf("\n");
-	
+
 	mymalloc(50, memory);
 	printf("\tSTATE 3: ");
 	printf("\n");
@@ -46,7 +40,6 @@ int main(void) {
 	print_all(memory);
 	printf("\n");
 
-
 	myfree(lol1);
 	printf("\tSTATE 6: ");
 	printf("\n");
@@ -64,6 +57,6 @@ int main(void) {
 	printf("\n");
 	print_all(memory);
 	printf("\n");
-*/
+
 	return 0;
 }

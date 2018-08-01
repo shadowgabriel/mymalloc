@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <stddef.h>
+#include <stdalign.h>
 
 /* application specific headers */
 #include "mymalloc.h"
@@ -15,12 +16,13 @@ static void delete_h(chunk_header_t* header_ptr);
 
 /* implementation */
 
-void initMEM(void* start_adr_ptr, size_t mem_size) {
+void initMEM(void* start_adr_ptr, size_t size) {
+	size_t mem_size = size & ALIGN_MASK;
+
 	/* declare headers */
 	chunk_header_t start_header;
 	chunk_header_t end_header;
 	void* end_adr_ptr = (void*) (( (uint8_t*) start_adr_ptr) + mem_size - sizeof(chunk_header_t));
-
 	start_header.size = mem_size - 2 * sizeof(chunk_header_t);
 	start_header.state = FREE;
 	start_header.prev = NULL;
@@ -53,7 +55,22 @@ void myfree(void* loc_ptr) {
 	delete_h(header_ptr);
 }
 
+
+static size_t align_chunk_size(size_t chunk_size) {
+	/* how many bytes exceed the alignment */
+	size_t nr_of_alig_units = chunk_size / MAX_ALIGN;
+	size_t bytes_exceed = chunk_size % MAX_ALIGN;
+
+	if(bytes_exceed != 0) {
+		nr_of_alig_units++;
+	}
+
+	return (nr_of_alig_units * MAX_ALIGN);
+}
+
 void* mymalloc(size_t chunk_size, void* start_adr_ptr) {
+	
+	chunk_size = align_chunk_size(chunk_size);
 
 	chunk_header_t* chunk_ptr = (chunk_header_t*) start_adr_ptr;
 
@@ -102,6 +119,8 @@ void* mymalloc(size_t chunk_size, void* start_adr_ptr) {
 }
 
 void* mymalloc_best(size_t chunk_size, void* start_adr_ptr) {
+
+	chunk_size = align_chunk_size(chunk_size);
 
 	chunk_header_t* chunk_ptr = (chunk_header_t*) start_adr_ptr;
 	chunk_header_t* best_chunk_ptr = NULL;
